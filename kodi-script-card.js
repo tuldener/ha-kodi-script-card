@@ -386,6 +386,14 @@ class KodiScriptCard extends HTMLElement {
     let serviceData = null;
 
     try {
+      if (!this._isValidPythonScriptPath(entry.script)) {
+        const validationMessage = "Ungueltiger Script-Pfad. Bitte einen .py Pfad angeben.";
+        if (config.debug) {
+          this._pushDebug(this._formatDebug("error", { script: entry.script }, null, validationMessage));
+        }
+        this._showToast(validationMessage);
+        return;
+      }
       const command = this._buildBuiltinCommand(entry.script);
       serviceData = {
         entity_id: config.entity,
@@ -451,17 +459,12 @@ class KodiScriptCard extends HTMLElement {
 
   _buildBuiltinCommand(value) {
     const raw = String(value || "").trim();
-    if (!raw) {
-      return "RunScript()";
-    }
-    if (raw.indexOf("(") !== -1 && raw.endsWith(")")) {
-      return raw;
-    }
-    const lower = raw.toLowerCase();
-    if (lower.endsWith(".xsp")) {
-      return "PlayMedia(" + raw + ")";
-    }
     return "RunScript(" + raw + ")";
+  }
+
+  _isValidPythonScriptPath(value) {
+    const raw = String(value || "").trim().toLowerCase();
+    return raw.length > 3 && raw.endsWith(".py");
   }
 
   _getNowPlayingTitle(stateObj) {
@@ -795,8 +798,8 @@ class KodiScriptCardEditor extends HTMLElement {
                 value="${this._escapeAttr(item.icon || this._config.icon || "mdi:script-text-play")}"
               ></ha-icon-picker>
 
-              <label>Pfad oder Builtin-Command (.py/.xsp oder RunScript(...))</label>
-              <input data-field="script" data-index="${index}" type="text" value="${this._escapeAttr(item.script || "")}" />
+              <label>Script-Pfad (.py)</label>
+              <input data-field="script" data-index="${index}" type="text" value="${this._escapeAttr(item.script || "")}" placeholder="/storage/.kodi/userdata/xyz.py" />
             </div>
           `;
         }.bind(this)
