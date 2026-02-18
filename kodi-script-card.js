@@ -8,6 +8,7 @@ class KodiScriptCard extends HTMLElement {
       type: "custom:kodi-script-card",
       icon: "mdi:script-text-play",
       debug: false,
+      stop_before_run: false,
       entity: "",
       scripts: [
         {
@@ -51,6 +52,7 @@ class KodiScriptCard extends HTMLElement {
     this._config = {
       icon: "mdi:script-text-play",
       debug: false,
+      stop_before_run: false,
       ...sanitizedConfig,
     };
     if (!Array.isArray(this._debugHistory)) {
@@ -394,6 +396,18 @@ class KodiScriptCard extends HTMLElement {
         this._showToast(validationMessage);
         return;
       }
+      if (config.stop_before_run) {
+        const stopData = {
+          entity_id: config.entity,
+          method: "XBMC.ExecuteBuiltin",
+          command: "PlayerControl(Stop)",
+        };
+        const stopResponse = await this._hass.callService("kodi", "call_method", stopData);
+        if (config.debug) {
+          this._pushDebug(this._formatDebug("success", stopData, stopResponse));
+        }
+        await this._sleep(700);
+      }
       const command = this._buildBuiltinCommand(entry.script);
       serviceData = {
         entity_id: config.entity,
@@ -465,6 +479,10 @@ class KodiScriptCard extends HTMLElement {
   _isValidPythonScriptPath(value) {
     const raw = String(value || "").trim().toLowerCase();
     return raw.length > 3 && raw.endsWith(".py");
+  }
+
+  _sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   _getNowPlayingTitle(stateObj) {
@@ -586,6 +604,7 @@ class KodiScriptCardEditor extends HTMLElement {
       type: "custom:kodi-script-card",
       icon: "mdi:script-text-play",
       debug: false,
+      stop_before_run: false,
       entity: "",
       ...config,
     };
@@ -659,6 +678,7 @@ class KodiScriptCardEditor extends HTMLElement {
     delete normalized.params;
     delete normalized.open_mode;
     delete normalized.window;
+    normalized.stop_before_run = !!normalized.stop_before_run;
     normalized.scripts = (normalized.scripts || [])
       .filter((item) => item && item.script)
       .map((item) => ({ name: item.name || item.script, icon: item.icon || normalized.icon, script: item.script }));
@@ -669,6 +689,9 @@ class KodiScriptCardEditor extends HTMLElement {
   _updateRootField(field, value) {
     let normalizedValue = value;
     if (field === "debug") {
+      normalizedValue = value === "true";
+    }
+    if (field === "stop_before_run") {
       normalizedValue = value === "true";
     }
     const next = { ...this._config, [field]: normalizedValue };
@@ -818,6 +841,12 @@ class KodiScriptCardEditor extends HTMLElement {
         <select data-root="debug">
           <option value="false" ${this._config.debug ? "" : "selected"}>Aus</option>
           <option value="true" ${this._config.debug ? "selected" : ""}>Ein</option>
+        </select>
+
+        <label>Aktive Wiedergabe vorher stoppen</label>
+        <select data-root="stop_before_run">
+          <option value="false" ${this._config.stop_before_run ? "" : "selected"}>Aus</option>
+          <option value="true" ${this._config.stop_before_run ? "selected" : ""}>Ein</option>
         </select>
 
         <div class="section-head">

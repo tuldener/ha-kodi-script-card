@@ -7,6 +7,7 @@ Eine Lovelace-Kachel für Kodi Builtin-Aufrufe über `kodi.call_method`.
 - Mehrere Scripts in einer Card
 - Aufruf via `XBMC.ExecuteBuiltin`
 - Strikte Validierung: nur Script-Pfade mit `.py`
+- Optional: `stop_before_run: true` stoppt zuerst die aktuelle Wiedergabe
 - Visueller Lovelace-Editor (GUI)
 - Icon-Auswahl pro Script
 - Header mit Kodi-Infos und System-Aktionen
@@ -31,6 +32,7 @@ Eine Lovelace-Kachel für Kodi Builtin-Aufrufe über `kodi.call_method`.
 ```yaml
 type: custom:kodi-script-card
 entity: media_player.kodi_wohnzimmer
+stop_before_run: true
 scripts:
   - name: Mein Script
     icon: mdi:script-text-play
