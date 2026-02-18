@@ -397,23 +397,11 @@ class KodiScriptCard extends HTMLElement {
         return;
       }
       if (config.stop_before_run) {
-        const stopData = {
-          entity_id: config.entity,
-          method: "XBMC.ExecuteBuiltin",
-          command: "PlayerControl(Stop)",
-        };
-        const stopResponse = await this._hass.callService("kodi", "call_method", stopData);
-        if (config.debug) {
-          this._pushDebug(this._formatDebug("success", stopData, stopResponse));
-        }
+        await this._stopActivePlayers(config.entity, !!config.debug);
         await this._sleep(700);
       }
       const command = this._buildBuiltinCommand(entry.script);
-      serviceData = {
-        entity_id: config.entity,
-        method: "XBMC.ExecuteBuiltin",
-        command: command,
-      };
+      serviceData = this._buildCallMethodPayload(config.entity, "XBMC.ExecuteBuiltin", { command: command });
 
       const response = await this._hass.callService("kodi", "call_method", serviceData);
       if (config.debug) {
@@ -476,9 +464,42 @@ class KodiScriptCard extends HTMLElement {
     return "RunScript(" + raw + ")";
   }
 
+  _buildCallMethodPayload(entityId, method, payload) {
+    const data = {
+      entity_id: entityId,
+      method: method,
+    };
+    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+      Object.assign(data, payload);
+      if (Object.prototype.hasOwnProperty.call(payload, "command")) {
+        const command = payload.command;
+        data.params = { command: command };
+        data.parameters = [command];
+      }
+    }
+    return data;
+  }
+
   _isValidPythonScriptPath(value) {
     const raw = String(value || "").trim().toLowerCase();
     return raw.length > 3 && raw.endsWith(".py");
+  }
+
+  async _stopActivePlayers(entityId, debugEnabled) {
+    const playerIds = [0, 1, 2];
+    for (let i = 0; i < playerIds.length; i += 1) {
+      const request = this._buildCallMethodPayload(entityId, "Player.Stop", { playerid: playerIds[i] });
+      try {
+        const response = await this._hass.callService("kodi", "call_method", request);
+        if (debugEnabled) {
+          this._pushDebug(this._formatDebug("success", request, response));
+        }
+      } catch (err) {
+        if (debugEnabled) {
+          this._pushDebug(this._formatDebug("error", request, null, err));
+        }
+      }
+    }
   }
 
   _sleep(ms) {

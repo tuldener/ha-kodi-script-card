@@ -48,3 +48,6 @@ data:
   method: XBMC.ExecuteBuiltin
   command: RunScript(/storage/.kodi/userdata/xyz.py)
 ```
+
+Hinweis: Die Card sendet Builtin-Commands kompatibel mit mehreren Kodi-Integrationsvarianten
+(`command` plus zusaetzlich `params.command`/`parameters[0]`).
