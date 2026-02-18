@@ -1,13 +1,13 @@
 # Kodi Script Card (Home Assistant)
 
-Eine Lovelace-Kachel für Kodi-Aktionen. Diese Version basiert auf der `ha-kodi-smart-playlist-card` und dient als Startpunkt für ein eigenes HACS-Repository.
+Eine Lovelace-Kachel für Kodi-`RunScript(...)` Aufrufe über `kodi.call_method`.
 
 ## Features
 
-- Mehrere konfigurierbare Einträge in einer Card
-- Ausführung über Home Assistant Service `kodi.call_method`
+- Mehrere Scripts in einer Card
+- Aufruf via `XBMC.ExecuteBuiltin` mit `RunScript(<pfad>)`
 - Visueller Lovelace-Editor (GUI)
-- Icon-Auswahl pro Eintrag
+- Icon-Auswahl pro Script
 - Header mit Kodi-Infos und System-Aktionen
 - Optionaler Debug-Modus
 
@@ -30,12 +30,18 @@ Eine Lovelace-Kachel für Kodi-Aktionen. Diese Version basiert auf der `ha-kodi-
 ```yaml
 type: custom:kodi-script-card
 entity: media_player.kodi_wohnzimmer
-playlists:
-  - name: Aktion 1
-    icon: mdi:play
-    playlist: special://profile/playlists/video/Filme.xsp
+scripts:
+  - name: Mein Script
+    icon: mdi:script-text-play
+    script: /storage/.kodi/userdata/xyz.py
 ```
 
-## Hinweis
+## Gesendeter Service-Aufruf
 
-Das Repo ist aktuell ein funktionaler Fork der `ha-kodi-smart-playlist-card` mit neuem Karten-Typ (`custom:kodi-script-card`) und HACS-Metadaten für den separaten Einsatz.
+```yaml
+service: kodi.call_method
+data:
+  entity_id: media_player.dein_kodi
+  method: XBMC.ExecuteBuiltin
+  command: RunScript(/storage/.kodi/userdata/xyz.py)
+```

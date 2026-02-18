@@ -6,17 +6,14 @@ class KodiScriptCard extends HTMLElement {
   static getStubConfig() {
     return {
       type: "custom:kodi-script-card",
-      icon: "mdi:playlist-play",
-      method: "Player.Open",
-      open_mode: "partymode",
-      window: "videolibrary",
+      icon: "mdi:script-text-play",
       debug: false,
       entity: "",
-      playlists: [
+      scripts: [
         {
-          name: "Filme",
-          icon: "mdi:playlist-play",
-          playlist: "special://profile/playlists/video/Filme.xsp",
+          name: "Script 1",
+          icon: "mdi:script-text-play",
+          script: "/storage/.kodi/userdata/xyz.py",
         },
       ],
     };
@@ -24,18 +21,35 @@ class KodiScriptCard extends HTMLElement {
 
   setConfig(config) {
     const sanitizedConfig = { ...config };
-    delete sanitizedConfig.repeat_all;
-    delete sanitizedConfig.random_on;
-    if (Array.isArray(sanitizedConfig.playlists) && sanitizedConfig.playlists.length > 0) {
-      delete sanitizedConfig.open_mode;
-      delete sanitizedConfig.window;
+    delete sanitizedConfig.playlist;
+    delete sanitizedConfig.playlists;
+    delete sanitizedConfig.open_mode;
+    delete sanitizedConfig.window;
+    delete sanitizedConfig.method;
+    delete sanitizedConfig.params;
+
+    if (!Array.isArray(sanitizedConfig.scripts) || sanitizedConfig.scripts.length === 0) {
+      if (Array.isArray(config.playlists) && config.playlists.length > 0) {
+        sanitizedConfig.scripts = config.playlists.map((item) => ({
+          name: item.name || "Script",
+          icon: item.icon || "mdi:script-text-play",
+          script: item.script || item.playlist || "",
+        }));
+      } else if (config.playlist) {
+        sanitizedConfig.scripts = [
+          {
+            name: config.name || "Script",
+            icon: config.icon || "mdi:script-text-play",
+            script: config.playlist,
+          },
+        ];
+      } else {
+        sanitizedConfig.scripts = [];
+      }
     }
 
     this._config = {
-      icon: "mdi:playlist-play",
-      method: "Player.Open",
-      open_mode: "partymode",
-      window: "videolibrary",
+      icon: "mdi:script-text-play",
       debug: false,
       ...sanitizedConfig,
     };
@@ -78,37 +92,22 @@ class KodiScriptCard extends HTMLElement {
       return [];
     }
 
-    if (Array.isArray(this._config.playlists) && this._config.playlists.length > 0) {
-      return this._config.playlists
+    if (Array.isArray(this._config.scripts) && this._config.scripts.length > 0) {
+      return this._config.scripts
         .filter(function (item) {
-          return item && item.playlist;
+          return item && item.script;
         })
         .map(
           function (item) {
             return {
-              name: item.name || item.playlist,
-              playlist: item.playlist,
+              name: item.name || item.script,
+              script: item.script,
               icon: item.icon || this._config.icon,
-              method: item.method || this._config.method || "Player.Open",
-              open_mode: item.open_mode || "partymode",
-              window: item.window || "videolibrary",
-              params: item.params,
             };
           }.bind(this)
         );
     }
-
-    return [
-      {
-        name: this._config.name,
-        playlist: this._config.playlist,
-        icon: this._config.icon,
-        method: this._config.method || "Player.Open",
-        open_mode: "partymode",
-        window: "videolibrary",
-        params: this._config.params,
-      },
-    ];
+    return [];
   }
 
   _render() {
@@ -129,7 +128,7 @@ class KodiScriptCard extends HTMLElement {
       .map(
         function (entry, index) {
           return `
-          <button class="playlist-row" data-index="${index}" ${disabled ? "disabled" : ""}>
+          <button class="script-row" data-index="${index}" ${disabled ? "disabled" : ""}>
             <ha-icon icon="${this._escape(entry.icon)}"></ha-icon>
             <div class="row-text">
               <div class="row-title">${this._escape(entry.name)}</div>
@@ -184,7 +183,7 @@ class KodiScriptCard extends HTMLElement {
         </div>
         <div class="list">${rows}</div>
         ${!hasEntity ? '<div class="hint">Bitte im Editor eine Kodi-Entity auswaehlen.</div>' : ""}
-        ${!hasEntries ? '<div class="hint">Bitte mindestens eine Playlist konfigurieren.</div>' : ""}
+        ${!hasEntries ? '<div class="hint">Bitte mindestens ein Script konfigurieren.</div>' : ""}
         ${debugBlock}
       </ha-card>
       <style>
@@ -282,7 +281,7 @@ class KodiScriptCard extends HTMLElement {
           grid-template-columns: 1fr;
         }
 
-        .playlist-row {
+        .script-row {
           width: 100%;
           border: 0;
           border-bottom: 1px solid var(--divider-color);
@@ -297,8 +296,8 @@ class KodiScriptCard extends HTMLElement {
           text-align: left;
         }
 
-        .playlist-row:last-child { border-bottom: 0; }
-        .playlist-row:disabled { cursor: not-allowed; opacity: 0.6; }
+        .script-row:last-child { border-bottom: 0; }
+        .script-row:disabled { cursor: not-allowed; opacity: 0.6; }
 
         ha-icon {
           color: var(--primary-color);
@@ -353,7 +352,7 @@ class KodiScriptCard extends HTMLElement {
       </style>
     `;
 
-    const buttons = this.shadowRoot.querySelectorAll("button.playlist-row");
+    const buttons = this.shadowRoot.querySelectorAll("button.script-row");
     for (let i = 0; i < buttons.length; i += 1) {
       const button = buttons[i];
       button.addEventListener("click", () => this._handleTap(i));
@@ -387,61 +386,18 @@ class KodiScriptCard extends HTMLElement {
     let serviceData = null;
 
     try {
-      const method = entry.method || "Player.Open";
-      const openMode = entry.open_mode || "partymode";
       serviceData = {
         entity_id: config.entity,
-        method: method,
+        method: "XBMC.ExecuteBuiltin",
+        command: "RunScript(" + entry.script + ")",
       };
 
-      // Home Assistant kodi.call_method expects method parameters as top-level fields.
-      if (entry.params && typeof entry.params === "object" && !Array.isArray(entry.params)) {
-        Object.assign(serviceData, entry.params);
-      } else if (openMode === "gui_activate_window") {
-        serviceData.method = "GUI.ActivateWindow";
-        serviceData.window = entry.window || "videolibrary";
-        serviceData.parameters = [entry.playlist];
-      } else if (method === "GUI.ActivateWindow") {
-        serviceData.window = entry.window || "videolibrary";
-        serviceData.parameters = [entry.playlist];
-      } else if (method === "Player.Open") {
-        if (openMode === "xbmc_builtin_party") {
-          const commands = [
-            "PlayMedia(" + entry.playlist + ")",
-            "PlayerControl(RepeatAll)",
-            "PlayerControl(RandomOn)",
-          ];
-          const responses = [];
-          for (let i = 0; i < commands.length; i += 1) {
-            const builtInServiceData = {
-              entity_id: config.entity,
-              method: "XBMC.ExecuteBuiltin",
-              command: commands[i],
-            };
-            const stepResponse = await this._hass.callService("kodi", "call_method", builtInServiceData);
-            responses.push({ command: commands[i], response: stepResponse });
-          }
-          if (config.debug) {
-            this._pushDebug(
-              this._formatDebug("success", { mode: "xbmc_builtin_party", commands: commands }, responses)
-            );
-          }
-          this._showToast("Playlist gestartet (XBMC Builtin): " + entry.name);
-          this._render();
-          return;
-        }
-        serviceData.item = openMode === "file" ? { file: entry.playlist } : { partymode: entry.playlist };
-      } else {
-        serviceData.item = openMode === "file" ? { file: entry.playlist } : { partymode: entry.playlist };
-      }
-
       const response = await this._hass.callService("kodi", "call_method", serviceData);
-      await this._applyPostPlayCommands(config.entity);
       if (config.debug) {
         this._pushDebug(this._formatDebug("success", serviceData, response));
       }
 
-      this._showToast("Playlist gestartet: " + entry.name);
+      this._showToast("Script gestartet: " + entry.name);
       this._render();
     } catch (err) {
       const message = (err && err.message) || "Unbekannter Fehler";
@@ -480,32 +436,6 @@ class KodiScriptCard extends HTMLElement {
       }
       const message = (err && err.message) || "Unbekannter Fehler";
       this._showToast("Fehler: " + message);
-    }
-  }
-
-  async _applyPostPlayCommands(entityId) {
-    const commands = [
-      { method: "Player.SetRepeat", payload: { playerid: 0, repeat: "all" } },
-      { method: "Player.SetShuffle", payload: { playerid: 0, shuffle: true } },
-    ];
-
-    for (let i = 0; i < commands.length; i += 1) {
-      const command = commands[i];
-      const request = {
-        entity_id: entityId,
-        method: command.method,
-        ...command.payload,
-      };
-      try {
-        const response = await this._hass.callService("kodi", "call_method", request);
-        if (this._config && this._config.debug) {
-          this._pushDebug(this._formatDebug("success", request, response));
-        }
-      } catch (err) {
-        if (this._config && this._config.debug) {
-          this._pushDebug(this._formatDebug("error", request, null, err));
-        }
-      }
     }
   }
 
@@ -586,17 +516,6 @@ class KodiScriptCard extends HTMLElement {
       .replace(/'/g, "&#039;");
   }
 
-  _guessWindow(playlist) {
-    const path = String(playlist || "").toLowerCase();
-    if (path.indexOf("/playlists/music/") !== -1) {
-      return "musiclibrary";
-    }
-    if (path.indexOf("/playlists/mixed/") !== -1) {
-      return "videos";
-    }
-    return "videolibrary";
-  }
-
   _formatDebug(status, requestPayload, responsePayload, err) {
     const parts = [];
     parts.push("status: " + status);
@@ -646,45 +565,48 @@ class KodiScriptCardEditor extends HTMLElement {
   setConfig(config) {
     this._config = {
       type: "custom:kodi-script-card",
-      icon: "mdi:playlist-play",
-      method: "Player.Open",
-      open_mode: "partymode",
-      window: "videolibrary",
+      icon: "mdi:script-text-play",
       debug: false,
       entity: "",
       ...config,
     };
 
-    if (!Array.isArray(this._config.playlists) || this._config.playlists.length === 0) {
-      if (this._config.playlist) {
-        this._config.playlists = [
+    if (!Array.isArray(this._config.scripts) || this._config.scripts.length === 0) {
+      if (Array.isArray(this._config.playlists) && this._config.playlists.length > 0) {
+        this._config.scripts = this._config.playlists.map((item) => ({
+          name: item.name || "Script",
+          icon: item.icon || this._config.icon || "mdi:script-text-play",
+          script: item.script || item.playlist || "",
+        }));
+      } else if (this._config.playlist) {
+        this._config.scripts = [
           {
-            name: "Playlist",
-            icon: this._config.icon || "mdi:playlist-play",
-            open_mode: this._config.open_mode || "partymode",
-            window: this._config.window || "videolibrary",
-            playlist: this._config.playlist,
+            name: this._config.name || "Script",
+            icon: this._config.icon || "mdi:script-text-play",
+            script: this._config.playlist,
           },
         ];
       } else {
-        this._config.playlists = [
+        this._config.scripts = [
           {
-            name: "Neue Playlist",
-            icon: this._config.icon || "mdi:playlist-play",
-            open_mode: this._config.open_mode || "partymode",
-            window: this._config.window || "videolibrary",
-            playlist: "",
+            name: "Neues Script",
+            icon: this._config.icon || "mdi:script-text-play",
+            script: "",
           },
         ];
       }
     }
-    this._config.playlists = (this._config.playlists || []).map((item) => ({
+    this._config.scripts = (this._config.scripts || []).map((item) => ({
       ...item,
-      open_mode: item.open_mode || this._config.open_mode || "partymode",
-      window: item.window || this._config.window || "videolibrary",
+      icon: item.icon || this._config.icon || "mdi:script-text-play",
     }));
-    delete this._config.repeat_all;
-    delete this._config.random_on;
+    delete this._config.playlist;
+    delete this._config.playlists;
+    delete this._config.method;
+    delete this._config.params;
+    delete this._config.open_mode;
+    delete this._config.window;
+    delete this._config.name;
 
     this._render();
   }
@@ -712,18 +634,15 @@ class KodiScriptCardEditor extends HTMLElement {
   _normalizeConfigForSave(config) {
     const normalized = { ...config };
     delete normalized.name;
-    delete normalized.repeat_all;
-    delete normalized.random_on;
-
-    if (Array.isArray(normalized.playlists) && normalized.playlists.length > 0) {
-      normalized.playlists = normalized.playlists.map((item) => ({
-        ...item,
-        open_mode: item.open_mode || normalized.open_mode || "partymode",
-        window: item.window || normalized.window || "videolibrary",
-      }));
-      delete normalized.open_mode;
-      delete normalized.window;
-    }
+    delete normalized.playlist;
+    delete normalized.playlists;
+    delete normalized.method;
+    delete normalized.params;
+    delete normalized.open_mode;
+    delete normalized.window;
+    normalized.scripts = (normalized.scripts || [])
+      .filter((item) => item && item.script)
+      .map((item) => ({ name: item.name || item.script, icon: item.icon || normalized.icon, script: item.script }));
 
     return normalized;
   }
@@ -735,72 +654,72 @@ class KodiScriptCardEditor extends HTMLElement {
     }
     const next = { ...this._config, [field]: normalizedValue };
     delete next.playlist;
+    delete next.playlists;
     this._config = next;
     this._emitConfig(next);
     this._render();
   }
 
-  _updatePlaylistField(index, field, value) {
-    const playlists = (this._config.playlists || []).map(function (item) {
+  _updateScriptField(index, field, value) {
+    const scripts = (this._config.scripts || []).map(function (item) {
       return { ...item };
     });
-    if (!playlists[index]) {
+    if (!scripts[index]) {
       return;
     }
 
-    playlists[index][field] = value;
+    scripts[index][field] = value;
 
     const next = {
       ...this._config,
-      playlists: playlists,
+      scripts: scripts,
     };
     delete next.playlist;
+    delete next.playlists;
     this._config = next;
     this._emitConfig(next);
     this._render();
   }
 
-  _addPlaylist() {
-    const playlists = (this._config.playlists || []).concat([
+  _addScript() {
+    const scripts = (this._config.scripts || []).concat([
       {
-        name: "Neue Playlist",
-        icon: this._config.icon || "mdi:playlist-play",
-        open_mode: this._config.open_mode || "partymode",
-        window: this._config.window || "videolibrary",
-        playlist: "",
+        name: "Neues Script",
+        icon: this._config.icon || "mdi:script-text-play",
+        script: "",
       },
     ]);
 
     const next = {
       ...this._config,
-      playlists: playlists,
+      scripts: scripts,
     };
     delete next.playlist;
+    delete next.playlists;
     this._config = next;
     this._emitConfig(next);
     this._render();
   }
 
-  _removePlaylist(index) {
-    const playlists = (this._config.playlists || []).filter(function (_item, i) {
+  _removeScript(index) {
+    const scripts = (this._config.scripts || []).filter(function (_item, i) {
       return i !== index;
     });
 
-    if (playlists.length === 0) {
-      playlists.push({
-        name: "Neue Playlist",
-        icon: this._config.icon || "mdi:playlist-play",
-        open_mode: this._config.open_mode || "partymode",
-        window: this._config.window || "videolibrary",
-        playlist: "",
+    if (scripts.length === 0) {
+      scripts.push({
+        name: "Neues Script",
+        icon: this._config.icon || "mdi:script-text-play",
+        script: "",
       });
     }
 
     const next = {
       ...this._config,
-      playlists: playlists,
+      scripts: scripts,
     };
     delete next.playlist;
+    delete next.playlists;
     this._config = next;
     this._emitConfig(next);
     this._render();
@@ -811,7 +730,7 @@ class KodiScriptCardEditor extends HTMLElement {
       return;
     }
 
-    const playlists = this._config.playlists || [];
+    const scripts = this._config.scripts || [];
     const kodiEntities = this._getKodiEntities();
     const hasCurrentEntity = !!this._config.entity;
     const knownEntity = kodiEntities.some(
@@ -841,13 +760,13 @@ class KodiScriptCardEditor extends HTMLElement {
       )
       .join("");
 
-    const playlistRows = playlists
+    const scriptRows = scripts
       .map(
         function (item, index) {
           return `
-            <div class="playlist-item" data-index="${index}">
+            <div class="script-item" data-index="${index}">
               <div class="row-head">
-                <div class="row-label">Playlist ${index + 1}</div>
+                <div class="row-label">Script ${index + 1}</div>
                 <button class="danger" type="button" data-action="remove" data-index="${index}">Entfernen</button>
               </div>
               <label>Name</label>
@@ -857,21 +776,11 @@ class KodiScriptCardEditor extends HTMLElement {
               <ha-icon-picker
                 data-field="icon"
                 data-index="${index}"
-                value="${this._escapeAttr(item.icon || this._config.icon || "mdi:playlist-play")}"
+                value="${this._escapeAttr(item.icon || this._config.icon || "mdi:script-text-play")}"
               ></ha-icon-picker>
 
-              <label>Window</label>
-              <select data-field="window" data-index="${index}">
-                ${this._getWindowOptions(item.window || this._config.window || "videolibrary")}
-              </select>
-
-              <label>Open Mode</label>
-              <select data-field="open_mode" data-index="${index}">
-                ${this._getOpenModeOptions(item.open_mode || this._config.open_mode || "partymode")}
-              </select>
-
-              <label>Playlist-Pfad (.xsp)</label>
-              <input data-field="playlist" data-index="${index}" type="text" value="${this._escapeAttr(item.playlist || "")}" />
+              <label>Script-Pfad (.py)</label>
+              <input data-field="script" data-index="${index}" type="text" value="${this._escapeAttr(item.script || "")}" />
             </div>
           `;
         }.bind(this)
@@ -893,11 +802,11 @@ class KodiScriptCardEditor extends HTMLElement {
         </select>
 
         <div class="section-head">
-          <div>Playlists</div>
-          <button id="add" type="button">+ Playlist</button>
+          <div>Scripts</div>
+          <button id="add" type="button">+ Script</button>
         </div>
 
-        ${playlistRows}
+        ${scriptRows}
       </div>
 
       <style>
@@ -924,7 +833,7 @@ class KodiScriptCardEditor extends HTMLElement {
           font-weight: 600;
         }
 
-        .playlist-item {
+        .script-item {
           border: 1px solid var(--divider-color);
           border-radius: 8px;
           padding: 10px;
@@ -1002,18 +911,18 @@ class KodiScriptCardEditor extends HTMLElement {
       });
     }
 
-    const playlistInputs = this.shadowRoot.querySelectorAll("input[data-field]");
-    for (let i = 0; i < playlistInputs.length; i += 1) {
-      const input = playlistInputs[i];
+    const scriptInputs = this.shadowRoot.querySelectorAll("input[data-field]");
+    for (let i = 0; i < scriptInputs.length; i += 1) {
+      const input = scriptInputs[i];
       input.addEventListener("change", () => {
         const field = input.getAttribute("data-field");
         const index = Number(input.getAttribute("data-index"));
-        this._updatePlaylistField(index, field, input.value);
+        this._updateScriptField(index, field, input.value);
       });
     }
-    const playlistIconPickers = this.shadowRoot.querySelectorAll("ha-icon-picker[data-field='icon']");
-    for (let i = 0; i < playlistIconPickers.length; i += 1) {
-      const picker = playlistIconPickers[i];
+    const scriptIconPickers = this.shadowRoot.querySelectorAll("ha-icon-picker[data-field='icon']");
+    for (let i = 0; i < scriptIconPickers.length; i += 1) {
+      const picker = scriptIconPickers[i];
       picker.addEventListener("value-changed", (event) => {
         const index = Number(picker.getAttribute("data-index"));
         const value =
@@ -1022,16 +931,7 @@ class KodiScriptCardEditor extends HTMLElement {
           typeof event.detail.value === "string"
             ? event.detail.value
             : "";
-        this._updatePlaylistField(index, "icon", value);
-      });
-    }
-    const playlistSelects = this.shadowRoot.querySelectorAll("select[data-field]");
-    for (let i = 0; i < playlistSelects.length; i += 1) {
-      const select = playlistSelects[i];
-      select.addEventListener("change", () => {
-        const field = select.getAttribute("data-field");
-        const index = Number(select.getAttribute("data-index"));
-        this._updatePlaylistField(index, field, select.value);
+        this._updateScriptField(index, "icon", value);
       });
     }
     this._syncIconPickersHass();
@@ -1041,13 +941,13 @@ class KodiScriptCardEditor extends HTMLElement {
       const button = removeButtons[i];
       button.addEventListener("click", () => {
         const index = Number(button.getAttribute("data-index"));
-        this._removePlaylist(index);
+        this._removeScript(index);
       });
     }
 
     const addButton = this.shadowRoot.getElementById("add");
     if (addButton) {
-      addButton.addEventListener("click", () => this._addPlaylist());
+      addButton.addEventListener("click", () => this._addScript());
     }
   }
 
@@ -1066,46 +966,14 @@ class KodiScriptCardEditor extends HTMLElement {
       .replace(/>/g, "&gt;");
   }
 
-  _getWindowOptions(selectedWindow) {
-    const baseOptions = ["videolibrary", "musiclibrary", "videos"];
-    const options = baseOptions.indexOf(selectedWindow) === -1 ? [selectedWindow].concat(baseOptions) : baseOptions;
-    return options
-      .map(function (name) {
-        const selected = name === selectedWindow ? "selected" : "";
-        return `<option value="${this._escapeAttr(name)}" ${selected}>${this._escape(name)}</option>`;
-      }.bind(this))
-      .join("");
-  }
-
   _syncIconPickersHass() {
     if (!this.shadowRoot || !this._hass) {
       return;
     }
-    const playlistIconPickers = this.shadowRoot.querySelectorAll("ha-icon-picker[data-field='icon']");
-    for (let i = 0; i < playlistIconPickers.length; i += 1) {
-      playlistIconPickers[i].hass = this._hass;
+    const scriptIconPickers = this.shadowRoot.querySelectorAll("ha-icon-picker[data-field='icon']");
+    for (let i = 0; i < scriptIconPickers.length; i += 1) {
+      scriptIconPickers[i].hass = this._hass;
     }
-  }
-
-  _getOpenModeOptions(selectedMode) {
-    const modes = ["partymode", "file", "gui_activate_window", "xbmc_builtin_party"];
-    const options = modes.indexOf(selectedMode) === -1 ? [selectedMode].concat(modes) : modes;
-    return options
-      .map(
-        function (mode) {
-          const selected = mode === selectedMode ? "selected" : "";
-          const label =
-            mode === "file"
-              ? "file (komplette Playlist)"
-              : mode === "gui_activate_window"
-                ? "GUI.ActivateWindow (Fenster + Parameter)"
-              : mode === "xbmc_builtin_party"
-                ? "xbmc_builtin_party (PlayMedia + Repeat + Random)"
-                : "partymode (dynamisch)";
-          return `<option value="${this._escapeAttr(mode)}" ${selected}>${this._escape(label)}</option>`;
-        }.bind(this)
-      )
-      .join("");
   }
 
   _getKodiEntities() {
@@ -1150,5 +1018,5 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "kodi-script-card",
   name: "Kodi Script Card",
-  description: "Startet eine oder mehrere Kodi Kodi Skripte/Aktionen via JSON-RPC.",
+  description: "Startet eine oder mehrere Kodi Scripts via XBMC.ExecuteBuiltin RunScript.",
 });
