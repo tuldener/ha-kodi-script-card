@@ -1,11 +1,15 @@
 # Kodi Script Card (Home Assistant)
 
-Eine Lovelace-Kachel für Kodi-`RunScript(...)` Aufrufe über `kodi.call_method`.
+Eine Lovelace-Kachel für Kodi Builtin-Aufrufe über `kodi.call_method`.
 
 ## Features
 
 - Mehrere Scripts in einer Card
-- Aufruf via `XBMC.ExecuteBuiltin` mit `RunScript(<pfad>)`
+- Aufruf via `XBMC.ExecuteBuiltin`
+- Automatische Befehlswahl:
+  - `.py` -> `RunScript(<pfad>)`
+  - `.xsp` -> `PlayMedia(<pfad>)`
+  - Voller Builtin-Command wie `RunScript(...)` oder `PlayMedia(...)` wird direkt übernommen
 - Visueller Lovelace-Editor (GUI)
 - Icon-Auswahl pro Script
 - Header mit Kodi-Infos und System-Aktionen
@@ -34,6 +38,9 @@ scripts:
   - name: Mein Script
     icon: mdi:script-text-play
     script: /storage/.kodi/userdata/xyz.py
+  - name: Meine Playlist
+    icon: mdi:playlist-play
+    script: /storage/.kodi/userdata/PartyMode-Gay.xsp
 ```
 
 ## Gesendeter Service-Aufruf

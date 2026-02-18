@@ -386,10 +386,11 @@ class KodiScriptCard extends HTMLElement {
     let serviceData = null;
 
     try {
+      const command = this._buildBuiltinCommand(entry.script);
       serviceData = {
         entity_id: config.entity,
         method: "XBMC.ExecuteBuiltin",
-        command: "RunScript(" + entry.script + ")",
+        command: command,
       };
 
       const response = await this._hass.callService("kodi", "call_method", serviceData);
@@ -397,7 +398,7 @@ class KodiScriptCard extends HTMLElement {
         this._pushDebug(this._formatDebug("success", serviceData, response));
       }
 
-      this._showToast("Script gestartet: " + entry.name);
+      this._showToast("Kodi-Aktion gesendet: " + entry.name);
       this._render();
     } catch (err) {
       const message = (err && err.message) || "Unbekannter Fehler";
@@ -446,6 +447,21 @@ class KodiScriptCard extends HTMLElement {
       composed: true,
     });
     this.dispatchEvent(event);
+  }
+
+  _buildBuiltinCommand(value) {
+    const raw = String(value || "").trim();
+    if (!raw) {
+      return "RunScript()";
+    }
+    if (raw.indexOf("(") !== -1 && raw.endsWith(")")) {
+      return raw;
+    }
+    const lower = raw.toLowerCase();
+    if (lower.endsWith(".xsp")) {
+      return "PlayMedia(" + raw + ")";
+    }
+    return "RunScript(" + raw + ")";
   }
 
   _getNowPlayingTitle(stateObj) {
@@ -779,7 +795,7 @@ class KodiScriptCardEditor extends HTMLElement {
                 value="${this._escapeAttr(item.icon || this._config.icon || "mdi:script-text-play")}"
               ></ha-icon-picker>
 
-              <label>Script-Pfad (.py)</label>
+              <label>Pfad oder Builtin-Command (.py/.xsp oder RunScript(...))</label>
               <input data-field="script" data-index="${index}" type="text" value="${this._escapeAttr(item.script || "")}" />
             </div>
           `;
